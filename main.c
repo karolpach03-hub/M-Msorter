@@ -1,15 +1,58 @@
 #include "header.h"
 
+TaskHandle_t task_ctrl_handle;
 
 void app_main(void)
 {
     //if(init_cam()!=ESP_OK) return;
+    init_button();
+    init_servos();
 
-
-
-    
+    if(xTaskCreate(task_controler, "ctrl", 2048, NULL, 1, &task_ctrl_handle)!=pdPASS)
+    {
+        ESP_LOGE("Main", "Task creation fail");
+        return;
+    }
+    vTaskDelay(portMAX_DELAY);
 }
 
+uint8_t debug_servo_id=1, debug_angle;
+void task_controler(void *args)
+{
+    uint32_t ntcode;
+    while(xTaskNotifyWait(0x00, 0xff, &ntcode, portMAX_DELAY))
+    {
+        switch(ntcode)
+        {
+        case CTRL_NTCODE_SW_CLICK:
+                debug_angle=servos[debug_servo_id].cur_pos_id;
+                debug_angle=(debug_angle+1)%servos[debug_servo_id].pos_num;
+
+                set_servo_position(&servos[debug_servo_id], debug_angle);
+
+                ESP_LOGI("CTRL", "servo %d to position %d -> %0.1f", 
+                    debug_servo_id, debug_angle, servos[debug_servo_id].angles[debug_angle]);
+            break;
+
+        case CTRL_NTCODE_SW_PRESS:
+                debug_servo_id=(debug_servo_id+1)%SRV_NUM;
+                ESP_LOGI("CTRL", "setting servo %d", debug_servo_id);
+            break;
+        
+        default:
+            break;
+        }
+    }
+}
+
+uart_config_t uart_cfg={
+    .baud_rate=115200,
+    .data_bits=UART_DATA_8_BITS,
+    .parity=UART_PARITY_DISABLE,
+    .stop_bits=UART_STOP_BITS_1,
+    .flow_ctrl=UART_HW_FLOWCTRL_DISABLE,
+    .source_clk=UART_SCLK_DEFAULT
+};
 
 
 // void init_uart()

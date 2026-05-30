@@ -6,3 +6,4 @@ dependencies:
 
   espressif/esp32-camera: '*'
   esp-idf-lib/button: "==1.0.0"
+  espressif/servo: "==0.1.0"

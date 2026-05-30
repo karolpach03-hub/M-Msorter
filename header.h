@@ -8,6 +8,7 @@
 #include "esp_camera.h"
 #include "driver/uart.h"
 #include "button.h"
+#include <iot_servo.h>
 
 /*  
 ====================================================================
@@ -34,33 +35,6 @@ esp_err_t init_cam();
 #define CAM_PIN_HREF    23
 #define CAM_PIN_PCLK    22
 
-static camera_config_t camera_config={
-    .pin_pwdn=CAM_PIN_PWDN,
-    .pin_reset=CAM_PIN_RESET,
-    .pin_xclk=CAM_PIN_XCLK,
-    .pin_sscb_sda=CAM_PIN_SIOD,
-    .pin_sscb_scl=CAM_PIN_SIOC,
-    .pin_d7=CAM_PIN_D7,
-    .pin_d6=CAM_PIN_D6,
-    .pin_d5=CAM_PIN_D5,
-    .pin_d4=CAM_PIN_D4,
-    .pin_d3=CAM_PIN_D3,
-    .pin_d2=CAM_PIN_D2,
-    .pin_d1=CAM_PIN_D1,
-    .pin_d0=CAM_PIN_D0,
-    .pin_vsync=CAM_PIN_VSYNC,
-    .pin_href=CAM_PIN_HREF,
-    .pin_pclk=CAM_PIN_PCLK,
-    .xclk_freq_hz=20000000,
-    .ledc_timer=LEDC_TIMER_0,
-    .ledc_channel=LEDC_CHANNEL_0,
-    .pixel_format=PIXFORMAT_RGB565,
-    .frame_size=FRAMESIZE_128X128,
-    .fb_count=1,
-    .fb_location=CAMERA_FB_IN_DRAM,
-    .grab_mode=CAMERA_GRAB_WHEN_EMPTY
-};
-
 #define SEN_PX_ROW_START    16
 #define SEN_PX_COL_START    16
 #define SEN_PX_ROW_NUM      16
@@ -68,21 +42,53 @@ static camera_config_t camera_config={
 #define SEN_PX_ROW_INTRVL   6
 #define SEN_PX_COL_INTRVL   6
 
-uart_config_t uart_cfg={
-    .baud_rate=115200,
-    .data_bits=UART_DATA_8_BITS,
-    .parity=UART_PARITY_DISABLE,
-    .stop_bits=UART_STOP_BITS_1,
-    .flow_ctrl=UART_HW_FLOWCTRL_DISABLE,
-    .source_clk=UART_SCLK_DEFAULT
-};
+extern uart_config_t uart_cfg;
 
 /*  
 ====================================================================
     IODs - input/output devices
 ====================================================================    
 */
-#define SRV_0_PIN       33
-#define SRV_1_PIN       14
-#define SRV_2_PIN       12
+#define SRV0_PIN        33
+#define SRV0_POS_NUM    3
+extern float srv0_angles[];
+
+#define SRV1_PIN        14
+#define SRV1_POS_NUM    7
+extern float srv1_angles[];
+#define SRV2_PIN        12
+#define SRV2_POS_NUM    2
+extern float srv2_angles[];
+
+#define SRV_NUM             3
+#define SRV_MAX_ANGLE_DEG   180
+#define SRV_MAX_PULSEW_US   2500
+#define SRV_MIN_PULSEW_US   500
+#define SRV_FREQ_HZ         50
+
+typedef struct
+{
+    float* angles;
+    uint8_t cur_pos_id;
+    uint8_t pos_num;
+    uint8_t servo_id;
+}servo_t;
+
+extern servo_t servos[SRV_NUM];
+
+void set_servo_position(servo_t *servo, uint8_t position);
+void init_servos();
+
 #define SW_PIN          13   
+void init_button();
+
+/*  
+====================================================================
+    Controller
+====================================================================    
+*/
+
+extern TaskHandle_t task_ctrl_handle;
+void task_controler(void *args);
+#define CTRL_NTCODE_SW_CLICK    0
+#define CTRL_NTCODE_SW_PRESS    1
