@@ -4,6 +4,7 @@
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "esp_log.h"
 #include "esp_camera.h"
 #include "driver/uart.h"
@@ -35,14 +36,54 @@ esp_err_t init_cam();
 #define CAM_PIN_HREF    23
 #define CAM_PIN_PCLK    22
 
+#define SEN_FRAME_WIDTH     128
+#define SEN_FRAME_HEIGHT    128
+
 #define SEN_PX_ROW_START    16
-#define SEN_PX_COL_START    16
-#define SEN_PX_ROW_NUM      16
-#define SEN_PX_COL_NUM      16
-#define SEN_PX_ROW_INTRVL   6
-#define SEN_PX_COL_INTRVL   6
+#define SEN_PX_COL_START    31
+#define SEN_PX_ROW_NUM      50
+#define SEN_PX_COL_NUM      11
+#define SEN_PX_ROW_INTRVL   4
+#define SEN_PX_COL_INTRVL   4
 
 extern uart_config_t uart_cfg;
+
+typedef struct
+{
+    uint8_t r, g, b;
+}uint8_rgb_t;
+
+typedef struct
+{
+    uint16_t r, g, b;
+}uint16_rgb_t;
+
+typedef struct
+{
+    uint32_t r, g, b;
+}uint32_rgb_t;
+
+typedef struct
+{
+    float r, g, b;
+}ratio_float_rgb_t;
+
+typedef enum{
+    MMS_UNKNOWN, MMS_RED, MMS_BLUE, MMS_BROWN, MMS_ORANGE, MMS_YELLOW, MMS_GREEN, MMS_NONE
+}mms_t;
+
+typedef struct{
+    mms_t type;
+    uint32_t r_target;
+    uint32_t g_target;
+}mms_profile_t;
+
+extern const mms_profile_t mms_lib[];
+
+void take_photo();
+void send_photo();
+uint8_rgb_t average_from_ROI();
+uint8_t make_decision(uint8_rgb_t av_color);
 
 /*  
 ====================================================================
@@ -89,6 +130,20 @@ void init_button();
 */
 
 extern TaskHandle_t task_ctrl_handle;
+extern QueueHandle_t task_ctrl_queue;
+
+extern bool autoreset;
+
 void task_controler(void *args);
 #define CTRL_NTCODE_SW_CLICK    0
 #define CTRL_NTCODE_SW_PRESS    1
+#define CTRL_NTCODE_NEXT_STEP   2
+
+typedef enum{
+    SMS_IDLE,
+    SMS_AQUIRE,
+    SMS_DROP,
+    SMS_RETURN,
+}SM_states_t;
+
+extern SM_states_t state;

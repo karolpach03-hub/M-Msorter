@@ -39,8 +39,7 @@ void sw_cb(button_t *btn, button_state_t state)
         if(state==BUTTON_PRESSED_LONG) sendval=CTRL_NTCODE_SW_PRESS;
         else return;
     }
-    //xQueueSend(task_queue_list[ENC_TASKID], &sendval, 0);
-    xTaskNotifyIndexed(task_ctrl_handle, 0, sendval, eSetValueWithoutOverwrite);
+    xQueueSend(task_ctrl_queue, &sendval, 0);
 }
 
 void init_servos()
