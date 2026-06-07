@@ -2,6 +2,7 @@
 
 camera_fb_t *fb;
 
+//camera cfg
 static camera_config_t camera_config={
     .pin_pwdn=CAM_PIN_PWDN,
     .pin_reset=CAM_PIN_RESET,
@@ -24,11 +25,12 @@ static camera_config_t camera_config={
     .ledc_channel=LEDC_CHANNEL_7,
     .pixel_format=PIXFORMAT_RGB565,
     .frame_size=FRAMESIZE_128X128,
-    .fb_count=1,
+    .fb_count=2,
     .fb_location=CAMERA_FB_IN_DRAM,
-    .grab_mode=CAMERA_GRAB_WHEN_EMPTY
+    .grab_mode=CAMERA_GRAB_LATEST,
 };
 
+//init cam
 esp_err_t init_cam()
 {
     esp_err_t err=esp_camera_init(&camera_config);
@@ -37,12 +39,42 @@ esp_err_t init_cam()
         ESP_LOGE("CAM", "Camera init failed with error 0x%x", err);
         return err;
     }
+
+    //explicit enabling of auto functions
+    sensor_t *s=esp_camera_sensor_get();
+    if(s!=NULL)
+    {
+        s->set_gain_ctrl(s, 1);
+        s->set_exposure_ctrl(s, 1);
+        s->set_whitebal(s, 1);
+    }
+
+    //taking test photos for a second to burn in the exposure etc.
+    camera_fb_t *tmp_fb;
+    for(uint8_t i=0; i<25; i++)
+    {
+        tmp_fb=esp_camera_fb_get();
+        if(tmp_fb) esp_camera_fb_return(tmp_fb);
+
+        vTaskDelay(pdMS_TO_TICKS(40));
+    }
+
+    //lock the autosettings
+    if(s!=NULL)
+    {
+        s->set_gain_ctrl(s, 0);
+        s->set_exposure_ctrl(s, 0);
+        s->set_whitebal(s, 0);
+        s->set_wb_mode(s, 0);
+    }
+
     ESP_LOGI("CAM", "Camera initialized successfully");
 
     fb=NULL;
     return ESP_OK;
 }
 
+//average rgb values from a matrix of 121 pixel
 uint8_rgb_t average_from_ROI()
 {
     uint8_rgb_t px={0};
@@ -59,7 +91,11 @@ uint8_rgb_t average_from_ROI()
             for(uint16_t col=SEN_PX_COL_START; col<col_max; col+=SEN_PX_COL_INTRVL)
             {
                 index=(row*SEN_FRAME_WIDTH+col)*2;
+
+                //there is a bug that swaps the bytes for every test after first one.
+                //So here is swap back
                 pixel=(fb->buf[index]<<8)|(fb->buf[index+1]);
+
                 px.r=(pixel>>11)<<3;
                 px.g=((pixel>>5)&0x3f)<<2;
                 px.b=(pixel&0x1F)<<3;
@@ -73,18 +109,23 @@ uint8_rgb_t average_from_ROI()
         px.g=sum_g/(SEN_PX_ROW_NUM*SEN_PX_COL_NUM);
         px.b=sum_b/(SEN_PX_ROW_NUM*SEN_PX_COL_NUM);
     }
+
     return px;
 }
+
+//pattern colors to compare the color got from camera
 const mms_profile_t mms_lib[]=
 {
-    {MMS_NONE, 335, 358},
-    {MMS_BLUE, 315, 348},
-    {MMS_BROWN, 340, 350},
-    {MMS_RED, 357, 336},
-    {MMS_YELLOW, 348, 365},
-    {MMS_GREEN, 325, 365},
-    {MMS_ORANGE, 357, 348},
+    {MMS_NONE,      342,	375},
+    {MMS_BLUE,      325,	380},
+    {MMS_BROWN,     345,	385},
+    {MMS_RED,       355,	360},
+    {MMS_YELLOW,    355,	375},
+    {MMS_GREEN,     335,	362},
+    {MMS_ORANGE,    362,	382},
 };
+
+//decide on what color the m&m is using 2D-NN
 uint8_t make_decision(uint8_rgb_t av_color)
 {
     uint32_t total=av_color.r+av_color.g+av_color.b;
@@ -111,16 +152,22 @@ uint8_t make_decision(uint8_rgb_t av_color)
     return best_match;
 }
 
+//aquire a photo
 void take_photo()
 {
+    //flush the buffer
     if(fb!=NULL)
     {
         esp_camera_fb_return(fb);
+        fb=NULL;
     }
+
+    //get new fb
     fb=esp_camera_fb_get();
-    //ESP_LOGI("CAM", "taken photo");
 }
 
+/*function to send a photo in bit form to the pc via uart for displaying    */
+/*purely for debug                                                          */
 void send_photo()
 {
     if(fb==NULL) 

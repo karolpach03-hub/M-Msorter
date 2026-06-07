@@ -1,3 +1,5 @@
+/*main header contaning macros (settings) and global variable/function declarations*/
+
 #pragma once
 #include <stdio.h>
 #include <inttypes.h>
@@ -10,6 +12,8 @@
 #include "driver/uart.h"
 #include "button.h"
 #include <iot_servo.h>
+
+#define DEBUG_REPLACE_AUTO_WITH_LOG     false
 
 /*  
 ====================================================================
@@ -41,7 +45,7 @@ esp_err_t init_cam();
 
 #define SEN_PX_ROW_START    16
 #define SEN_PX_COL_START    31
-#define SEN_PX_ROW_NUM      50
+#define SEN_PX_ROW_NUM      11
 #define SEN_PX_COL_NUM      11
 #define SEN_PX_ROW_INTRVL   4
 #define SEN_PX_COL_INTRVL   4
@@ -63,11 +67,6 @@ typedef struct
     uint32_t r, g, b;
 }uint32_rgb_t;
 
-typedef struct
-{
-    float r, g, b;
-}ratio_float_rgb_t;
-
 typedef enum{
     MMS_UNKNOWN, MMS_RED, MMS_BLUE, MMS_BROWN, MMS_ORANGE, MMS_YELLOW, MMS_GREEN, MMS_NONE
 }mms_t;
@@ -77,6 +76,16 @@ typedef struct{
     uint32_t r_target;
     uint32_t g_target;
 }mms_profile_t;
+
+#if DEBUG_REPLACE_AUTO_WITH_LOG
+typedef struct{
+    uint8_rgb_t avg_px;
+    uint8_t type;
+}debug_info_t;
+#define DEBUG_LOG_LEN   32
+extern debug_info_t debug_info[DEBUG_LOG_LEN];
+extern uint8_t debug_idx;
+#endif
 
 extern const mms_profile_t mms_lib[];
 

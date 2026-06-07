@@ -30,6 +30,7 @@ float srv2_angles[]={5, 45};//spoon - offset 5
 button_t sw={0};
 servo_t init_servo(uint8_t servo_id);
 
+//callback function for press/click of the button
 void sw_cb(button_t *btn, button_state_t state)
 {
     uint8_t sendval=0x00;

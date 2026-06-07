@@ -39,12 +39,16 @@ void app_main(void)
 }
 
 SM_states_t state;
-uint8_t debug_servo_id=1, debug_angle;
-uint8_rgb_t debug_px[15]={0};
-uint8_t dix=0;
 
 uint8_t target_drop;
 uint8_rgb_t average_pixel;
+
+#if DEBUG_REPLACE_AUTO_WITH_LOG
+debug_info_t debug_info[DEBUG_LOG_LEN];
+uint8_t debug_idx;
+#endif
+
+//main task
 void task_controler(void *args)
 {
     uint8_t ntcode, sendval=CTRL_NTCODE_NEXT_STEP;
@@ -57,8 +61,25 @@ void task_controler(void *args)
             break;
 
         case CTRL_NTCODE_SW_PRESS:
-            autoreset=!autoreset;
-            if(state==SMS_IDLE) xQueueSend(task_ctrl_queue, &sendval, 0);//start
+            #if DEBUG_REPLACE_AUTO_WITH_LOG
+                if(state==SMS_IDLE)
+                {
+                    ESP_LOGW("LOG", "printing %d samples", debug_idx);
+                    for(uint8_t i=0; i<debug_idx; i++)
+                    {
+                        printf("%d; %d; %d; %d\n", 
+                        debug_info[i].avg_px.r,
+                        debug_info[i].avg_px.g,
+                        debug_info[i].avg_px.b,
+                        debug_info[i].type);
+                    }
+                    debug_idx=0;
+                }
+            #else
+                //normal operation
+                autoreset=!autoreset;
+                if(state==SMS_IDLE) xQueueSend(task_ctrl_queue, &sendval, 0);//start
+            #endif
             break;
 
         case CTRL_NTCODE_NEXT_STEP:
@@ -68,33 +89,42 @@ void task_controler(void *args)
                 state=SMS_AQUIRE;
                 break;
 
-            case SMS_AQUIRE:
+            case SMS_AQUIRE://first step - rotor
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 set_servo_position(&servos[0], 1);//move to under camera
-                vTaskDelay(pdMS_TO_TICKS(1500));
+                vTaskDelay(pdMS_TO_TICKS(2000));
 
                 take_photo();
                 average_pixel=average_from_ROI();
                 target_drop=make_decision(average_pixel);
-                if(target_drop==0) autoreset=false;
+                if(target_drop==0)//none detected
+                {   
+                    //autoreset=false;
+                    //state=SMS_AQUIRE;
+                }
+                #if DEBUG_REPLACE_AUTO_WITH_LOG
+                    debug_info[debug_idx].avg_px=average_pixel;
+                    debug_info[debug_idx].type=target_drop;
+                    debug_idx=(debug_idx+1)%DEBUG_LOG_LEN;
+                #endif
 
                 set_servo_position(&servos[0], 2);//move to arm
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 state=SMS_DROP;
                 break;
 
-            case SMS_DROP:
+            case SMS_DROP://second step - arm
                 vTaskDelay(pdMS_TO_TICKS(1000));
-                set_servo_position(&servos[1], target_drop);//move to drop
+                set_servo_position(&servos[1], target_drop);//move to drop position
                 vTaskDelay(pdMS_TO_TICKS(200*target_drop));
 
-                set_servo_position(&servos[2], 1);//drop
+                set_servo_position(&servos[2], 1);//drop to trough
                 vTaskDelay(pdMS_TO_TICKS(1000));
 
                 state=SMS_RETURN;
                 break;
 
-            case SMS_RETURN:
+            case SMS_RETURN://reset all servos
                 set_servo_position(&servos[1], 0);
                 set_servo_position(&servos[2], 0);
                 set_servo_position(&servos[0], 0);
@@ -115,55 +145,3 @@ void task_controler(void *args)
         }
     }
 }
-
-        // case CTRL_NTCODE_SW_CLICK:
-        //         debug_angle=servos[debug_servo_id].cur_pos_id;
-        //         debug_angle=(debug_angle+1)%servos[debug_servo_id].pos_num;
-
-        //         set_servo_position(&servos[debug_servo_id], debug_angle);
-
-        //         ESP_LOGI("CTRL", "servo %d to position %d -> %0.1f", 
-        //             debug_servo_id, debug_angle, servos[debug_servo_id].angles[debug_angle]);
-        //     break;
-
-        // case CTRL_NTCODE_SW_PRESS:
-        //         debug_servo_id=(debug_servo_id+1)%SRV_NUM;
-        //         ESP_LOGI("CTRL", "setting servo %d", debug_servo_id);
-        //     break;
-
-// take_photo();
-            // mms_t color;
-            // for(uint8_t i=0; i<dix; i++)
-            // {
-            //     ESP_LOGI("MAIN", "rgb[%d]: (%d, %d, %d)", i, debug_px[i].r, debug_px[i].g, debug_px[i].b);
-            //     color=make_decision(debug_px[i]);
-            //     switch(color)
-            //     {
-            //     case MMS_BLUE: ESP_LOGW("Result", "blue"); break;
-            //     case MMS_RED: ESP_LOGW("Result", "red"); break;
-            //     case MMS_BROWN: ESP_LOGW("Result", "brow"); break;
-            //     case MMS_YELLOW: ESP_LOGW("Result", "yellow"); break;
-            //     case MMS_GREEN: ESP_LOGW("Result", "green"); break;
-            //     case MMS_ORANGE: ESP_LOGW("Result", "orange"); break;
-            //     case MMS_UNKNOWN: ESP_LOGW("Result", "UNKNOW"); break;
-            //     case MMS_NONE: ESP_LOGW("Result", "NONE"); break;
-                
-            //     default:
-            //         break;
-            //     }
-
-            //     debug_px[i].r=0;
-            //     debug_px[i].g=0;
-            //     debug_px[i].b=0;
-            // }
-            // dix=0;
-            // set_servo_position(&servos[0], 1);
-            // vTaskDelay(pdMS_TO_TICKS(500));
-            // take_photo();
-            // debug_px[dix]=average_from_ROI();
-            // dix++;
-
-            // vTaskDelay(pdMS_TO_TICKS(500));
-            // set_servo_position(&servos[0], 2);
-            // vTaskDelay(pdMS_TO_TICKS(1000));
-            // set_servo_position(&servos[0], 0);
